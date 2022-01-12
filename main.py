@@ -26,32 +26,40 @@ def asctobit(message_content):
     # Message to binary
     bitMessage = ""
     for i in message_content:
+        # print((format(ord(i), '08b')))
         bitMessage += (format(ord(i), '08b'))
     # print("taille en bit :", len(bitMessage))
     #    for i in range(len(newMessage)-1):
     #        print(newMessage[i])
-    # print("taille en bit :", len(bitMessage))
-    byte_array = "abc".encode()
-    binary_int = int.from_bytes(byte_array, "big")
-    bitMessage = bin(binary_int)
-
     while len(bitMessage) != bit_size:
         bitMessage += '00000000'
+    # print("taille en bit :", len(bitMessage))
+
+    # print("BitMessage = ", bitMessage[:24])
     return bitMessage
 
 
 def bittoasc(bit_content):
     print("on envoie", len(bit_content))
-    binary_int = int(bit_content, 2)
-    byte_number = binary_int.bit_length() + 7 // 8
-    binary_array = binary_int.to_bytes(byte_number, "big")
-    msg = binary_array.decode()
-    print(msg)
-    return "C'est ok mais c'est long"
+    n = 8
+    bit_content = [bit_content[i:i + 8] for i in range(0, len(bit_content), n)]
+    msg = ""
+    for char in bit_content:
+        if char == "00000000":
+            continue
+        # print("char is ", char)
+        ord_number = int(char, 2)
+        # print(ord_number)
+        char_value = chr(ord_number)
+        msg += char_value
+    print(msg.strip())
+    return " "
 
 
 def encrypt(image_path, message_content):
     img = Image.open(image_path)
+    bits_total=''
+
     # print(img.mode)
     msg = asctobit(message_content)
     size = img.width * img.height
@@ -66,7 +74,7 @@ def encrypt(image_path, message_content):
     print("Setting type as first 24 bits ")
     for y in range(0, 8):
         pixels = img.getpixel((0, y))
-        new_pixel = []
+        new_pixels = []
         for pixel in pixels:
             count += 1
             # print("count: ", count)
@@ -81,39 +89,47 @@ def encrypt(image_path, message_content):
             # print("bit_value", bit_value)
             bits = bits[:7] + bit_value
 
-            new_pixel.append(int(bits, 2))
+            new_pixels.append(int(bits, 2))
             # print(pixels)
         # print(pixels)
         # print("New image __ type: ", tuple(new_pixel))
-        img.putpixel((0, y), tuple(new_pixel))
+        img.putpixel((0, y), tuple(new_pixels))
 
     print("Encoding message")
     while usable_len < bit_size:
         for x in range(img.width):
-            print(usable_len)
+            # print(usable_len)
             for y in range(0, img.height):
-                new_pixel = []
+                new_pixels = []
                 if x == 0 and y <= 8:
-                    # print(x, y)
+                    #print(x, y)
                     continue
                 pixels = img.getpixel((x, y))
-                # print(pixel)
                 for pixel in pixels:
+                    # if usable_len == 24:
+                    #     print("good mdg =", msg[:24])
+                    #     print("made msg =", bits_total)
+                    #     quit(0)
                     usable_len += 1
                     bits = format(pixel, '08b')
                     # print("previous:",  bits)
                     try:
-                        bits = bits[:7] + msg[usable_len]
+                        bits = bits[:7] + msg[usable_len-1]
+                        bits_total += msg[usable_len-1]
+                        #print("MSG = ", bits)
                         if usable_len > bit_size:
                             break
                     except IndexError:
                         bits = bits
                     # print("then:",  bits)
-                    new_pixel.append(int(bits, 2))
-                # print(new_pixel)
+                    new_pixel = int(bits, 2)
+                    new_pixels.append(new_pixel)
                 # print(pixels)
                 # print("New image __ content:", tuple(new_pixel))
-                img.putpixel((x, y), tuple(new_pixel))
+                img.putpixel((x, y), tuple(new_pixels))
+                pixels_new = img.getpixel((x, y))
+                #print("OldPixels(", x, ",", y, ") is ", pixels)
+                #print("NewPixels(", x, ",", y, ") is ", pixels_new)
                 if usable_len > bit_size:
                     print(usable_len)
                     return img
@@ -133,34 +149,44 @@ def decrypt(image_path):
     dec_type = ''
     print("Getting type from first 24 bits ")
     for y in range(0, 8):
+        #print("y = ", y)
         pixels = img.getpixel((0, y))
         for pixel in pixels:
             bits = format(pixel, '08b')
-            dec_type += bits
-    print('type is :', dec_type)
-    print("Decoding message")
+            dec_type += bits[:7]
+
+    dec_type = dec_type[::-1]
+
+    # print('type is :', len(dec_type), dec_type)
+    print("Decoding message", dec_type)
     while usable_len < bit_size:
         for x in range(img.width):
             print(usable_len)
             for y in range(0, img.height):
                 new_pixel = []
                 if x == 0 and y <= 8:
-                    # print(x, y)
+                    #print(x, y)
                     continue
                 pixels = img.getpixel((x, y))
                 # print(pixel)
                 for pixel in pixels:
+                    # if usable_len == 24:
+                    #     print(msg)
+                    #     quit(0)
                     usable_len += 1
                     bits = format(pixel, '08b')
+                    #print("MSG = ", bits)
+                    #print(bits[-1])
                     msg += bits[-1]
                     # print("msg", msg)
                     if usable_len > bit_size:
                         msg = msg[0:bit_size:1]
-                        print(usable_len)
+                        #print(usable_len)
                         print("on sort de la boucle")
-                        #print(bittoasc(msg))
+                        # print(bittoasc(msg))
+                        #print(msg[:24])
                         return bittoasc(msg)
-    print(msg)
+                #print("ReadPixels(", x, ",", y, ")  is ", pixels)
 
 
 if __name__ == '__main__':
@@ -183,8 +209,9 @@ if __name__ == '__main__':
             with open(text_file) as f:
                 message = f.read()
                 # print(message)
-            img = encrypt(path, message)
-            img.save("elephant2.png")
+            img_enc = encrypt(path, message)
+            img_enc.save("elephant2.png")
+            print("Image saved to elephant2.png")
 
         else:
             print("Message needs to have a value ")
