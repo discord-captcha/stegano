@@ -7,40 +7,51 @@
 
 # PIL module is used to extract
 # pixels of image and modify it
-from io import BytesIO
-from bitstring import BitArray
+import time
 from PIL import Image
 import argparse
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--filename", required=True, help="Filename to decrypt or encrypt")
+parser.add_argument("--input", required=True, help="input to decrypt or encrypt")
+parser.add_argument("--output", help="input to decrypt or encrypt")
 parser.add_argument("--decrypt", help="echo the string you use here", action="store_true")
 parser.add_argument("--encrypt", help="echo the string you use here", action="store_true")
 parser.add_argument("--text_file", help="Message to add if encrypting")
 args = parser.parse_args()
-path = args.filename
+path = args.input
 bit_size = 1000000
 
 
-def asctobit(message_content):
+def asc_to_bit(message_content):
     # Message to binary
     bitMessage = ""
+    count = 0
+    print('Translating messages to bits')
     for i in message_content:
+        count += 1
+        percent = int((count / len(message_content)) * 100)
+        percent_str = str(percent) + '%'
+        print(percent_str, end='\r')
         # print((format(ord(i), '08b')))
         bitMessage += (format(ord(i), '08b'))
     # print("taille en bit :", len(bitMessage))
     #    for i in range(len(newMessage)-1):
     #        print(newMessage[i])
+    print()
+    # print(str(len(message_content)*8))
+    count = 0
     while len(bitMessage) != bit_size:
+        count += 1
         bitMessage += '00000000'
     # print("taille en bit :", len(bitMessage))
-
+    # print("Added", str(8*count), "bits")
+    time.sleep(1)
     # print("BitMessage = ", bitMessage[:24])
     return bitMessage
 
 
-def bittoasc(bit_content):
-    #print(len(bit_content), "bits recieved",)
+def bit_to_asc(bit_content):
+    # print(len(bit_content), "bits recieved",)
     n = 8
     bit_content = [bit_content[i:i + 8] for i in range(0, len(bit_content), n)]
     msg = ""
@@ -52,16 +63,20 @@ def bittoasc(bit_content):
         # print(ord_number)
         char_value = chr(ord_number)
         msg += char_value
+
+    print("------------ message ------------")
     print(msg.strip())
+    print("------------ message ------------")
+
     return " "
 
 
 def encrypt(image_path, message_content):
     img = Image.open(image_path)
-    bits_total=''
+    bits_total = ''
 
     # print(img.mode)
-    msg = asctobit(message_content)
+    msg = asc_to_bit(message_content)
     size = img.width * img.height
     if size < bit_size + 24:
         print("Image need to be at least 1,000,008 pixels")
@@ -98,13 +113,12 @@ def encrypt(image_path, message_content):
     print("Encoding message")
     while usable_len < bit_size:
         for x in range(img.width):
-            percent=str(int((usable_len/bit_size)*100)) + '%'
+            percent = str(int((usable_len / bit_size) * 100)) + '%'
             print(percent, end='\r')
-            print()
             for y in range(0, img.height):
                 new_pixels = []
                 if x == 0 and y <= 8:
-                    #print(x, y)
+                    # print(x, y)
                     continue
                 pixels = img.getpixel((x, y))
                 for pixel in pixels:
@@ -116,9 +130,9 @@ def encrypt(image_path, message_content):
                     bits = format(pixel, '08b')
                     # print("previous:",  bits)
                     try:
-                        bits = bits[:7] + msg[usable_len-1]
-                        bits_total += msg[usable_len-1]
-                        #print("MSG = ", bits)
+                        bits = bits[:7] + msg[usable_len - 1]
+                        bits_total += msg[usable_len - 1]
+                        # print("MSG = ", bits)
                         if usable_len > bit_size:
                             break
                     except IndexError:
@@ -130,16 +144,18 @@ def encrypt(image_path, message_content):
                 # print("New image __ content:", tuple(new_pixel))
                 img.putpixel((x, y), tuple(new_pixels))
                 pixels_new = img.getpixel((x, y))
-                #print("OldPixels(", x, ",", y, ") is ", pixels)
-                #print("NewPixels(", x, ",", y, ") is ", pixels_new)
+                # print("OldPixels(", x, ",", y, ") is ", pixels)
+                # print("NewPixels(", x, ",", y, ") is ", pixels_new)
                 if usable_len > bit_size:
-                    print(usable_len)
+                    print("100%")
+                    # print(usable_len)
                     return img
                 # quit(0)
 
 
 def decrypt(image_path):
     img = Image.open(image_path)
+    img = img.convert(mode='RGB')
     msg = ""
     size = img.width * img.height
     if size < bit_size + 24:
@@ -151,30 +167,35 @@ def decrypt(image_path):
     dec_type = ''
     print("Getting type from first 24 bits ")
     for y in range(0, 8):
-        #print("y = ", y)
+        # print("y = ", y)
         pixels = img.getpixel((0, y))
         for pixel in pixels:
-            #print(pixel)
+            # print(pixel)
             bits = format(pixel, '08b')
-            #print(bits[-1])
+            # print(bits[-1])
             dec_type += bits[-1]
-            #print(dec_type)
-    #print("Dec_type =", dec_type)
+            # print(dec_type)
+    # print("Dec_type =", dec_type)
     dec_type = dec_type[::-1]
-    #print("Dec_type =", dec_type)
+    # print("Dec_type =", dec_type)
     dec_type = int(dec_type, 2)
-    #print("Dec_type =", dec_type)
+    # print("Dec_type =", dec_type)
     # print('type is :', len(dec_type), dec_type)
     print("Decoding message")
     while usable_len < bit_size:
         for x in range(img.width):
-            percent=str(int((usable_len/bit_size)*100)) + '%'
-            print(percent, end='\r')
-            print()
+            percent = int((usable_len / bit_size) * 100)
+            percent_str = str(percent) + '%'
+            if percent > 100:
+                print("100%", end='\r')
+                # print(x,y)
+                # print("There is an error with the file decrypting please retry, range exceeded :", usable_len)
+                break
+            print(percent_str, end='\r')
             for y in range(0, img.height):
                 new_pixel = []
                 if x == 0 and y <= 8:
-                    #print(x, y)
+                    # print(x, y)
                     continue
                 pixels = img.getpixel((x, y))
                 # print(pixel)
@@ -184,16 +205,17 @@ def decrypt(image_path):
                     #     quit(0)
                     usable_len += 1
                     bits = format(pixel, '08b')
-                    #print("MSG = ", bits)
-                    #print(bits[-1])
+                    # print("MSG = ", bits)
+                    # print(bits[-1])
                     msg += bits[-1]
                     # print("msg", msg)
                     if usable_len > bit_size:
                         msg = msg[0:bit_size:1]
-                        if dec_type == 1:
-                            print("Decoding message as text")
-                            return bittoasc(msg)
-                #print("ReadPixels(", x, ",", y, ")  is ", pixels)
+                # print("ReadPixels(", x, ",", y, ")  is ", pixels)
+    #print(pixels)
+    if dec_type == 1:
+        print("100%")
+        return bit_to_asc(msg)
 
 
 if __name__ == '__main__':
@@ -209,16 +231,19 @@ if __name__ == '__main__':
         print(message.strip())
 
     if args.encrypt:
-
         if args.text_file is not None:
-            # print(args.encrypt)
-            text_file = args.text_file
-            with open(text_file) as f:
-                message = f.read()
-                # print(message)
-            img_enc = encrypt(path, message)
-            img_enc.save("elephant2.png")
-            print("Image saved to elephant2.png")
-
+            if args.output is not None:
+                # print(args.encrypt)
+                text_file = args.text_file
+                with open(text_file) as f:
+                    message = f.read()
+                    # print(message)
+                img_enc = encrypt(path, message)
+                picture_rgb = img_enc.convert(mode='RGB')  # convert RGBA to RGB
+                #picture_8bit = picture_rgb.quantize(colors=256, method=Image.MAXCOVERAGE)
+                picture_rgb.save(args.output, "PNG", optimize=True, compress_level=9)
+                print("Image saved to", args.output)
+            else:
+                print("--output is needed")
         else:
-            print("Message needs to have a value ")
+            print("Message needs to have a value")
