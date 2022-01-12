@@ -40,7 +40,7 @@ def asctobit(message_content):
 
 
 def bittoasc(bit_content):
-    print("on envoie", len(bit_content))
+    #print(len(bit_content), "bits recieved",)
     n = 8
     bit_content = [bit_content[i:i + 8] for i in range(0, len(bit_content), n)]
     msg = ""
@@ -98,7 +98,9 @@ def encrypt(image_path, message_content):
     print("Encoding message")
     while usable_len < bit_size:
         for x in range(img.width):
-            # print(usable_len)
+            percent=str(int((usable_len/bit_size)*100)) + '%'
+            print(percent, end='\r')
+            print()
             for y in range(0, img.height):
                 new_pixels = []
                 if x == 0 and y <= 8:
@@ -152,16 +154,23 @@ def decrypt(image_path):
         #print("y = ", y)
         pixels = img.getpixel((0, y))
         for pixel in pixels:
+            #print(pixel)
             bits = format(pixel, '08b')
-            dec_type += bits[:7]
-
+            #print(bits[-1])
+            dec_type += bits[-1]
+            #print(dec_type)
+    #print("Dec_type =", dec_type)
     dec_type = dec_type[::-1]
-
+    #print("Dec_type =", dec_type)
+    dec_type = int(dec_type, 2)
+    #print("Dec_type =", dec_type)
     # print('type is :', len(dec_type), dec_type)
-    print("Decoding message", dec_type)
+    print("Decoding message")
     while usable_len < bit_size:
         for x in range(img.width):
-            print(usable_len)
+            percent=str(int((usable_len/bit_size)*100)) + '%'
+            print(percent, end='\r')
+            print()
             for y in range(0, img.height):
                 new_pixel = []
                 if x == 0 and y <= 8:
@@ -181,11 +190,9 @@ def decrypt(image_path):
                     # print("msg", msg)
                     if usable_len > bit_size:
                         msg = msg[0:bit_size:1]
-                        #print(usable_len)
-                        print("on sort de la boucle")
-                        # print(bittoasc(msg))
-                        #print(msg[:24])
-                        return bittoasc(msg)
+                        if dec_type == 1:
+                            print("Decoding message as text")
+                            return bittoasc(msg)
                 #print("ReadPixels(", x, ",", y, ")  is ", pixels)
 
 
