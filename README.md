@@ -1,4 +1,6 @@
 [TOC]
+  
+Authors: Aymerick Bres, Sarah Costa, Romain DUSI, Thomas Le Martelot, Maël Turon
 
 # How it works 
 
