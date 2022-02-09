@@ -7,15 +7,15 @@
 
 # PIL module is used to extract
 # pixels of image and modify it
+import base64
 import binascii
 import time
-from hashlib import sha256
+import hashlib
 
 from Crypto.Util import Counter
 from PIL import Image
 import argparse
-from Crypto.Cipher import AES
-from Crypto import Random
+from cryptography.fernet import Fernet
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", required=True, help="input to decrypt or encrypt")
@@ -35,11 +35,12 @@ bit_size = 1000000
 
 
 def asc_to_bit(message_content):
+    message_content=message_content.decode()
     # Message to binary
     bitMessage = ""
     count = 0
     print('Translating messages to bits')
-    # print(message_content)
+    #print(message_content)
     for i in message_content:
         count += 1
         percent = int((count / len(message_content)) * 100)
@@ -81,9 +82,9 @@ def bit_to_asc(bit_content):
         char_value = chr(ord_number)
         msg += char_value
     msg = msg.strip()
-    print("------------ message ------------")
-    print(msg)
-    print("------------ message ------------")
+    #print("------------ message ------------")
+    #print(msg)
+    #print("------------ message ------------")
 
     return msg
 
@@ -93,9 +94,9 @@ def encrypt(image_path, message_content, password_value):
     exif_value = img.info.get("exif")
     img = img.convert(mode='RGB')
     bits_total = ''
-    print(type(message_content))
-    message_content = cipher(password_value, iv, message_content)
-    print(message_content)
+    #print(type(message_content))
+    message_content = cipher(password_value, message_content)
+    #print(message_content)
     # print(img.mode)
     msg = asc_to_bit(message_content)
     size = img.width * img.height
@@ -241,51 +242,41 @@ def decrypt(image_path, password_value):
     # print(pixels)
     if dec_type == 1:
         print("100%")
-        print("MSG : ", bit_to_asc(msg))
-        return decipher(password_value, iv, bit_to_asc(msg))
+        #print("MSG : ", bit_to_asc(msg))
+        return decipher(password_value, bit_to_asc(msg))
 
 
-def cipher(key, iv, plaintext):
-    key_bytes = 32
-    assert len(key) == key_bytes
+def cipher(key, plaintext):
+    f = Fernet(key)
+    plaintext = plaintext.encode('utf-8')
+    token = f.encrypt(plaintext)
+    return token
 
-    # Convert the IV to a Python integer.
-    #iv_int = int(binascii.hexlify(iv), 16)
 
-    # Create a new Counter object with IV = iv_int.
-    ctr = Counter.new(AES.block_size * 8, initial_value=iv_int)
+def decipher(key, ciphertext):
+    ciphertext = ciphertext.encode('utf-8')
+    #print("CIPHER TEXT TYPE : ", type(ciphertext))
+    f = Fernet(key)
+    decrypted = f.decrypt(ciphertext).decode('utf-8')
+    return decrypted
 
-    # Create AES-CTR cipher.
-    aes = AES.new(key, AES.MODE_CTR, iv)
 
-    # Encrypt and return IV and ciphertext.
-    ciphertext = aes.encrypt(plaintext)
-    return iv, ciphertext
-
-# Takes as input a 32-byte key, a 16-byte IV, and a ciphertext, and outputs the
-# corresponding plaintext.
-def decipher(key, iv, ciphertext):
-    key_bytes = 32
-    assert len(key) == key_bytes
-
-    # Initialize counter for decryption. iv should be the same as the output of
-    # encrypt().
-    iv_int = int(iv.encode('hex'), 16)
-    ctr = Counter.new(AES.block_size * 8, initial_value=iv_int)
-
-    # Create AES-CTR cipher.
-    aes = AES.new(key, AES.MODE_CTR, counter=ctr)
-
-    # Decrypt and return the plaintext.
-    plaintext = aes.decrypt(ciphertext)
-    return plaintext
+def bsd_checksum(string):
+    file_content = string.encode()
+    checksum = 0
+    for char in file_content:
+        checksum = (checksum >> 1) + ((checksum & 1) << 15)
+        checksum += char
+        checksum &= 0xffff
+    return checksum
 
 
 if __name__ == '__main__':
-    iv = 'IV_KEY'
-    iv.encode('utf-8')
+
+    # print("IV IS:", iv)
     password = args.password
-    password = sha256(password.encode()).digest()
+    password = base64.urlsafe_b64encode(hashlib.sha256(password.encode()).digest())
+
     if args.decrypt and args.encrypt:
         print("You need to chose between decrypt or encrypt.")
         quit(1)
@@ -294,6 +285,7 @@ if __name__ == '__main__':
             print("Do not add a message if decrypting... Ignoring.")
 
         message = decrypt(path, password)
+        print("Message is : ")
         print(message.strip())
 
     if args.encrypt:
