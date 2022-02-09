@@ -1,2 +1,2 @@
-Pillow~=9.0.0
-Pycryptodome~=3.14.1
+Pillow~=9.0
+cryptography~=36.0.1

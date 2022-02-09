@@ -5,11 +5,9 @@
 # PIL module is used to extract
 # pixels of image and modify it
 import base64
-import binascii
 import time
 import hashlib
 
-from Crypto.Util import Counter
 from PIL import Image
 import argparse
 from cryptography.fernet import Fernet
