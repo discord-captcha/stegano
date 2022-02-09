@@ -7,12 +7,19 @@
 
 # PIL module is used to extract
 # pixels of image and modify it
+import base64
+import binascii
 import time
+import hashlib
+
+from Crypto.Util import Counter
 from PIL import Image
 import argparse
+from cryptography.fernet import Fernet
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", required=True, help="input to decrypt or encrypt")
+parser.add_argument("--password", required=True, help="Pass to encrypt message in image")
 parser.add_argument("--output", help="input to decrypt or encrypt")
 parser.add_argument("--decrypt", help="echo the string you use here", action="store_true")
 parser.add_argument("--encrypt", help="echo the string you use here", action="store_true")
@@ -21,17 +28,19 @@ parser.add_argument("--text_file", help="Message to add if encrypting")
 args = parser.parse_args()
 path = args.input
 if args.debug is not None:
-    debug=args.debug
+    debug = args.debug
 else:
-    debug=False
+    debug = False
 bit_size = 1000000
 
 
 def asc_to_bit(message_content):
+    message_content=message_content.decode()
     # Message to binary
     bitMessage = ""
     count = 0
     print('Translating messages to bits')
+    #print(message_content)
     for i in message_content:
         count += 1
         percent = int((count / len(message_content)) * 100)
@@ -72,19 +81,22 @@ def bit_to_asc(bit_content):
         # print(ord_number)
         char_value = chr(ord_number)
         msg += char_value
+    msg = msg.strip()
+    #print("------------ message ------------")
+    #print(msg)
+    #print("------------ message ------------")
 
-    print("------------ message ------------")
-    print(msg.strip())
-    print("------------ message ------------")
-
-    return " "
+    return msg
 
 
-def encrypt(image_path, message_content):
+def encrypt(image_path, message_content, password_value):
     img = Image.open(image_path)
+    exif_value = img.info.get("exif")
     img = img.convert(mode='RGB')
     bits_total = ''
-
+    #print(type(message_content))
+    message_content = cipher(password_value, message_content)
+    #print(message_content)
     # print(img.mode)
     msg = asc_to_bit(message_content)
     size = img.width * img.height
@@ -134,9 +146,9 @@ def encrypt(image_path, message_content):
                 for pixel in pixels:
                     if debug:
                         if usable_len == 24:
-                             print("good mdg =", msg[:24])
-                             print("made msg =", bits_total)
-                             quit(0)
+                            print("good mdg =", msg[:24])
+                            print("made msg =", bits_total)
+                            quit(0)
                     usable_len += 1
                     bits = format(pixel, '08b')
                     # print("previous:",  bits)
@@ -162,11 +174,11 @@ def encrypt(image_path, message_content):
                 if usable_len > bit_size:
                     print("100%")
                     # print(usable_len)
-                    return img
+                    return img, exif_value
                 # quit(0)
 
 
-def decrypt(image_path):
+def decrypt(image_path, password_value):
     img = Image.open(image_path)
     img = img.convert(mode='RGB')
     msg = ""
@@ -215,8 +227,8 @@ def decrypt(image_path):
                 for pixel in pixels:
                     if debug:
                         if usable_len > 24:
-                             print(msg)
-                             quit(0)
+                            print(msg)
+                            quit(0)
                     usable_len += 1
                     bits = format(pixel, '08b')
                     if debug:
@@ -227,22 +239,53 @@ def decrypt(image_path):
                         msg = msg[0:bit_size:1]
                 if debug:
                     print("ReadPixels(", x, ",", y, ")  is ", pixels)
-    #print(pixels)
+    # print(pixels)
     if dec_type == 1:
         print("100%")
-        return bit_to_asc(msg)
+        #print("MSG : ", bit_to_asc(msg))
+        return decipher(password_value, bit_to_asc(msg))
+
+
+def cipher(key, plaintext):
+    f = Fernet(key)
+    plaintext = plaintext.encode('utf-8')
+    token = f.encrypt(plaintext)
+    return token
+
+
+def decipher(key, ciphertext):
+    ciphertext = ciphertext.encode('utf-8')
+    #print("CIPHER TEXT TYPE : ", type(ciphertext))
+    f = Fernet(key)
+    decrypted = f.decrypt(ciphertext).decode('utf-8')
+    return decrypted
+
+
+def bsd_checksum(string):
+    file_content = string.encode()
+    checksum = 0
+    for char in file_content:
+        checksum = (checksum >> 1) + ((checksum & 1) << 15)
+        checksum += char
+        checksum &= 0xffff
+    return checksum
 
 
 if __name__ == '__main__':
+
+    # print("IV IS:", iv)
+    password = args.password
+    password = base64.urlsafe_b64encode(hashlib.sha256(password.encode()).digest())
+
     if args.decrypt and args.encrypt:
         print("You need to chose between decrypt or encrypt.")
         quit(1)
-
     if args.decrypt:
         if args.text_file is not None:
             print("Do not add a message if decrypting... Ignoring.")
 
-        message = decrypt(path)
+        message = decrypt(path, password)
+        print("Message is : ")
         print(message.strip())
 
     if args.encrypt:
@@ -253,10 +296,11 @@ if __name__ == '__main__':
                 with open(text_file) as f:
                     message = f.read()
                     # print(message)
-                img_enc = encrypt(path, message)
+                img_enc, exif = encrypt(path, message, password)
                 picture_rgb = img_enc.convert(mode='RGB')  # convert RGBA to RGB
-                #picture_8bit = picture_rgb.quantize(colors=256, method=Image.MAXCOVERAGE)
-                picture_rgb.save(args.output, "PNG")
+                # picture_8bit = picture_rgb.quantize(colors=256, method=Image.MAXCOVERAGE)
+                picture_rgb.save(args.output, "PNG", exif=exif)
+                print("Exif", exif)
                 print("Image saved to", args.output)
             else:
                 print("--output is needed")
