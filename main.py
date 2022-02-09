@@ -7,12 +7,19 @@
 
 # PIL module is used to extract
 # pixels of image and modify it
+import binascii
 import time
+from hashlib import sha256
+
+from Crypto.Util import Counter
 from PIL import Image
 import argparse
+from Crypto.Cipher import AES
+from Crypto import Random
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", required=True, help="input to decrypt or encrypt")
+parser.add_argument("--password", required=True, help="Pass to encrypt message in image")
 parser.add_argument("--output", help="input to decrypt or encrypt")
 parser.add_argument("--decrypt", help="echo the string you use here", action="store_true")
 parser.add_argument("--encrypt", help="echo the string you use here", action="store_true")
@@ -21,9 +28,9 @@ parser.add_argument("--text_file", help="Message to add if encrypting")
 args = parser.parse_args()
 path = args.input
 if args.debug is not None:
-    debug=args.debug
+    debug = args.debug
 else:
-    debug=False
+    debug = False
 bit_size = 1000000
 
 
@@ -32,6 +39,7 @@ def asc_to_bit(message_content):
     bitMessage = ""
     count = 0
     print('Translating messages to bits')
+    # print(message_content)
     for i in message_content:
         count += 1
         percent = int((count / len(message_content)) * 100)
@@ -72,19 +80,22 @@ def bit_to_asc(bit_content):
         # print(ord_number)
         char_value = chr(ord_number)
         msg += char_value
-
+    msg = msg.strip()
     print("------------ message ------------")
-    print(msg.strip())
+    print(msg)
     print("------------ message ------------")
 
-    return " "
+    return msg
 
 
-def encrypt(image_path, message_content):
+def encrypt(image_path, message_content, password_value):
     img = Image.open(image_path)
+    exif_value = img.info.get("exif")
     img = img.convert(mode='RGB')
     bits_total = ''
-
+    print(type(message_content))
+    message_content = cipher(password_value, iv, message_content)
+    print(message_content)
     # print(img.mode)
     msg = asc_to_bit(message_content)
     size = img.width * img.height
@@ -134,9 +145,9 @@ def encrypt(image_path, message_content):
                 for pixel in pixels:
                     if debug:
                         if usable_len == 24:
-                             print("good mdg =", msg[:24])
-                             print("made msg =", bits_total)
-                             quit(0)
+                            print("good mdg =", msg[:24])
+                            print("made msg =", bits_total)
+                            quit(0)
                     usable_len += 1
                     bits = format(pixel, '08b')
                     # print("previous:",  bits)
@@ -162,11 +173,11 @@ def encrypt(image_path, message_content):
                 if usable_len > bit_size:
                     print("100%")
                     # print(usable_len)
-                    return img
+                    return img, exif_value
                 # quit(0)
 
 
-def decrypt(image_path):
+def decrypt(image_path, password_value):
     img = Image.open(image_path)
     img = img.convert(mode='RGB')
     msg = ""
@@ -215,8 +226,8 @@ def decrypt(image_path):
                 for pixel in pixels:
                     if debug:
                         if usable_len > 24:
-                             print(msg)
-                             quit(0)
+                            print(msg)
+                            quit(0)
                     usable_len += 1
                     bits = format(pixel, '08b')
                     if debug:
@@ -227,22 +238,62 @@ def decrypt(image_path):
                         msg = msg[0:bit_size:1]
                 if debug:
                     print("ReadPixels(", x, ",", y, ")  is ", pixels)
-    #print(pixels)
+    # print(pixels)
     if dec_type == 1:
         print("100%")
-        return bit_to_asc(msg)
+        print("MSG : ", bit_to_asc(msg))
+        return decipher(password_value, iv, bit_to_asc(msg))
+
+
+def cipher(key, iv, plaintext):
+    key_bytes = 32
+    assert len(key) == key_bytes
+
+    # Convert the IV to a Python integer.
+    #iv_int = int(binascii.hexlify(iv), 16)
+
+    # Create a new Counter object with IV = iv_int.
+    ctr = Counter.new(AES.block_size * 8, initial_value=iv_int)
+
+    # Create AES-CTR cipher.
+    aes = AES.new(key, AES.MODE_CTR, iv)
+
+    # Encrypt and return IV and ciphertext.
+    ciphertext = aes.encrypt(plaintext)
+    return iv, ciphertext
+
+# Takes as input a 32-byte key, a 16-byte IV, and a ciphertext, and outputs the
+# corresponding plaintext.
+def decipher(key, iv, ciphertext):
+    key_bytes = 32
+    assert len(key) == key_bytes
+
+    # Initialize counter for decryption. iv should be the same as the output of
+    # encrypt().
+    iv_int = int(iv.encode('hex'), 16)
+    ctr = Counter.new(AES.block_size * 8, initial_value=iv_int)
+
+    # Create AES-CTR cipher.
+    aes = AES.new(key, AES.MODE_CTR, counter=ctr)
+
+    # Decrypt and return the plaintext.
+    plaintext = aes.decrypt(ciphertext)
+    return plaintext
 
 
 if __name__ == '__main__':
+    iv = 'IV_KEY'
+    iv.encode('utf-8')
+    password = args.password
+    password = sha256(password.encode()).digest()
     if args.decrypt and args.encrypt:
         print("You need to chose between decrypt or encrypt.")
         quit(1)
-
     if args.decrypt:
         if args.text_file is not None:
             print("Do not add a message if decrypting... Ignoring.")
 
-        message = decrypt(path)
+        message = decrypt(path, password)
         print(message.strip())
 
     if args.encrypt:
@@ -253,10 +304,11 @@ if __name__ == '__main__':
                 with open(text_file) as f:
                     message = f.read()
                     # print(message)
-                img_enc = encrypt(path, message)
+                img_enc, exif = encrypt(path, message, password)
                 picture_rgb = img_enc.convert(mode='RGB')  # convert RGBA to RGB
-                #picture_8bit = picture_rgb.quantize(colors=256, method=Image.MAXCOVERAGE)
-                picture_rgb.save(args.output, "PNG")
+                # picture_8bit = picture_rgb.quantize(colors=256, method=Image.MAXCOVERAGE)
+                picture_rgb.save(args.output, "PNG", exif=exif)
+                print("Exif", exif)
                 print("Image saved to", args.output)
             else:
                 print("--output is needed")
